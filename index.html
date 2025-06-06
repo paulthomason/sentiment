@@ -7,7 +7,10 @@
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Sentiment Analysis Library -->
-    <script src="https://unpkg.com/sentiment/min.js"></script>
+    <script type="module">
+        import { SentimentIntensityAnalyzer } from 'https://cdn.jsdelivr.net/npm/vader-sentiment@1.1.3/src/vaderSentiment.js';
+        window.SentimentIntensityAnalyzer = SentimentIntensityAnalyzer;
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -145,7 +148,7 @@
         function main() {
             logToScreen('App Initialized. DOM and scripts loaded.');
 
-            const sentiment = new Sentiment();
+            const sentiment = new SentimentIntensityAnalyzer();
             let positiveStoryCache = [];
 
             // Load API keys from local storage on page load
@@ -223,9 +226,9 @@
                             const title = story.title || "";
                             const abstract = story.abstract || "";
                             const textToAnalyze = `${title}. ${abstract}`;
-                            const result = sentiment.analyze(textToAnalyze);
-                            if (result.score > 0) {
-                                positiveStories.push({ title, abstract, url: story.url, score: result.score });
+                            const result = sentiment.polarity_scores(textToAnalyze);
+                            if (result.compound > 0) {
+                                positiveStories.push({ title, abstract, url: story.url, score: result.compound });
                             }
                         }
                     });
