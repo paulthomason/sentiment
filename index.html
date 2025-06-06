@@ -123,7 +123,8 @@
         
         // --- Logger Function ---
         function logToScreen(message, type = 'log') {
-            console[type](message); // Keep original console logging
+            const logFn = typeof console[type] === 'function' ? console[type] : console.log;
+            logFn(message); // Keep original console logging
             const p = document.createElement('p');
             const timestamp = new Date().toLocaleTimeString();
             p.innerHTML = `<span class="text-gray-500">${timestamp}:</span> ${message}`;
