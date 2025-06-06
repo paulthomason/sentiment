@@ -63,12 +63,13 @@
         <main>
              <!-- API Key Input Section -->
              <div class="bg-white p-6 rounded-xl shadow-md mb-8">
-                <h2 class="text-xl font-semibold mb-3">NYT API Key</h2>
+                <h2 class="text-xl font-semibold mb-3">API Keys</h2>
                 <p class="text-sm text-gray-600 mb-4">
-                    This app runs entirely in your browser. Your API key is saved only to your browser's local storage and is never sent anywhere else. You can get a free key from the <a href="https://developer.nytimes.com/get-started" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">NYT Developer Portal</a>.
+                    This app runs entirely in your browser. Your keys are saved only to local storage and are never sent anywhere else. Get a NYT key from the <a href="https://developer.nytimes.com/get-started" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">NYT Developer Portal</a> and a Gemini key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">AI&nbsp;Studio</a>.
                 </p>
                 <div class="flex flex-col sm:flex-row gap-4">
-                    <input type="password" id="apiKeyInput" placeholder="Enter your NYT API Key here" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                    <input type="password" id="apiKeyInput" placeholder="NYT API Key" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                    <input type="password" id="geminiKeyInput" placeholder="Gemini API Key" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none transition">
                     <button id="fetchNewsBtn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                         Find Good News
                     </button>
@@ -106,6 +107,7 @@
     <script>
         // DOM Elements
         const apiKeyInput = document.getElementById('apiKeyInput');
+        const geminiKeyInput = document.getElementById('geminiKeyInput');
         const fetchNewsBtn = document.getElementById('fetchNewsBtn');
         const resultsContainer = document.getElementById('results-container');
         const initialMessage = document.getElementById('initial-message');
@@ -131,15 +133,20 @@
         
         function main() {
             logToScreen('App Initialized. DOM and scripts loaded.');
-            
+
             const sentiment = new Sentiment();
             let positiveStoryCache = [];
-            
-            // Load API key from local storage on page load
+
+            // Load API keys from local storage on page load
             const savedKey = localStorage.getItem('nytApiKey');
             if (savedKey) {
                 apiKeyInput.value = savedKey;
                 logToScreen('Loaded API key from local storage.');
+            }
+            const savedGeminiKey = localStorage.getItem('geminiApiKey');
+            if (savedGeminiKey) {
+                geminiKeyInput.value = savedGeminiKey;
+                logToScreen('Loaded Gemini API key from local storage.');
             }
 
             // --- Event Listeners ---
@@ -151,6 +158,7 @@
 
             async function getGoodNews() {
                 const apiKey = apiKeyInput.value.trim();
+                const geminiApiKey = geminiKeyInput.value.trim();
                 errorMessage.classList.add('hidden');
 
                 if (!apiKey) {
@@ -160,7 +168,8 @@
                 
                 logToScreen('Attempting to fetch news...');
                 localStorage.setItem('nytApiKey', apiKey);
-                logToScreen('Saved API key to local storage.');
+                localStorage.setItem('geminiApiKey', geminiApiKey);
+                logToScreen('Saved API keys to local storage.');
                 resultsContainer.innerHTML = '<div class="loader"></div>';
 
                 const url = `https://api.nytimes.com/svc/topstories/v2/home.json?api-key=${apiKey}`;
@@ -263,7 +272,8 @@
             
             async function callGemini(prompt) {
                 logToScreen('Calling Gemini API...');
-                const geminiApiKey = ""; // Leave blank
+                const geminiApiKey = geminiKeyInput.value.trim();
+                if (!geminiApiKey) throw new Error('Gemini API key is missing.');
                 const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
                 const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
 
