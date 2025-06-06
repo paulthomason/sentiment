@@ -149,7 +149,7 @@
         function main() {
             logToScreen('App Initialized. DOM and scripts loaded.');
 
-            const sentiment = new SentimentIntensityAnalyzer();
+            const sentiment = SentimentIntensityAnalyzer;
             let positiveStoryCache = [];
 
             // Load API keys from local storage on page load
