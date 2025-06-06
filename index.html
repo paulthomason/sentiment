@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Good News Filter | NYT Edition</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Sentiment Analysis Library -->
+    <script src="https://unpkg.com/sentiment/min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            padding-bottom: 200px; /* Add padding to prevent log from overlapping content */
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Styles for the modal */
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); display: flex;
+            justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background-color: white; padding: 2rem; border-radius: 0.75rem;
+            max-width: 90%; width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        /* Styles for the new debug log */
+        #log-console {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 200px;
+            background-color: #2d3748; color: #f7fafc; font-family: monospace;
+            font-size: 14px; border-top: 4px solid #4a5568; overflow-y: scroll;
+            padding: 1rem; z-index: 9999;
+        }
+        #log-console p { margin-bottom: 0.5rem; }
+        .log-error { color: #f56565; }
+        .log-success { color: #68d391; }
+        .log-warn { color: #f6e05e; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="max-w-4xl mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Today's Good News</h1>
+            <p class="text-lg text-gray-600">A filter for positive stories from The New York Times front page.</p>
+        </header>
+
+        <main>
+             <!-- API Key Input Section -->
+             <div class="bg-white p-6 rounded-xl shadow-md mb-8">
+                <h2 class="text-xl font-semibold mb-3">NYT API Key</h2>
+                <p class="text-sm text-gray-600 mb-4">
+                    This app runs entirely in your browser. Your API key is saved only to your browser's local storage and is never sent anywhere else. You can get a free key from the <a href="https://developer.nytimes.com/get-started" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">NYT Developer Portal</a>.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <input type="password" id="apiKeyInput" placeholder="Enter your NYT API Key here" class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                    <button id="fetchNewsBtn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition shadow focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Find Good News
+                    </button>
+                </div>
+                 <p id="error-message" class="text-red-500 text-sm mt-2 hidden"></p>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results-container" class="bg-white p-6 rounded-xl shadow-md min-h-[200px] flex items-center justify-center">
+                <div id="initial-message" class="text-center text-gray-500">
+                    <p>Enter your API key above to see today's positive stories.</p>
+                </div>
+            </div>
+        </main>
+        
+        <footer class="text-center mt-12 text-gray-500 text-sm">
+            <p>Powered by the <a href="https://developer.nytimes.com/" class="hover:underline">New York Times API</a> and the Gemini API.</p>
+        </footer>
+    </div>
+
+    <!-- Modal for Gemini Responses -->
+    <div id="geminiModal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <h3 id="modalTitle" class="text-2xl font-bold mb-4"></h3>
+            <div id="modalBody" class="text-gray-700 leading-relaxed"></div>
+            <button id="closeModalBtn" class="absolute top-4 right-5 text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+        </div>
+    </div>
+
+    <!-- Debug Log Console -->
+    <div id="log-console">
+        <p class="font-bold border-b border-gray-600 pb-2 mb-2">Debug Log</p>
+    </div>
+
+    <script>
+        // DOM Elements
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const fetchNewsBtn = document.getElementById('fetchNewsBtn');
+        const resultsContainer = document.getElementById('results-container');
+        const initialMessage = document.getElementById('initial-message');
+        const errorMessage = document.getElementById('error-message');
+        const modal = document.getElementById('geminiModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const logConsole = document.getElementById('log-console');
+        
+        // --- Logger Function ---
+        function logToScreen(message, type = 'log') {
+            console[type](message); // Keep original console logging
+            const p = document.createElement('p');
+            const timestamp = new Date().toLocaleTimeString();
+            p.innerHTML = `<span class="text-gray-500">${timestamp}:</span> ${message}`;
+            if (type === 'error') p.classList.add('log-error');
+            if (type === 'success') p.classList.add('log-success');
+            if (type === 'warn') p.classList.add('log-warn');
+            logConsole.appendChild(p);
+            logConsole.scrollTop = logConsole.scrollHeight; // Auto-scroll
+        }
+        
+        function main() {
+            logToScreen('App Initialized. DOM and scripts loaded.');
+            
+            const sentiment = new Sentiment();
+            let positiveStoryCache = [];
+            
+            // Load API key from local storage on page load
+            const savedKey = localStorage.getItem('nytApiKey');
+            if (savedKey) {
+                apiKeyInput.value = savedKey;
+                logToScreen('Loaded API key from local storage.');
+            }
+
+            // --- Event Listeners ---
+            fetchNewsBtn.addEventListener('click', getGoodNews);
+            apiKeyInput.addEventListener('keyup', (event) => {
+                if (event.key === 'Enter') getGoodNews();
+            });
+            closeModalBtn.addEventListener('click', () => modal.classList.add('hidden'));
+
+            async function getGoodNews() {
+                const apiKey = apiKeyInput.value.trim();
+                errorMessage.classList.add('hidden');
+
+                if (!apiKey) {
+                    showError("Please enter an API key.");
+                    return;
+                }
+                
+                logToScreen('Attempting to fetch news...');
+                localStorage.setItem('nytApiKey', apiKey);
+                logToScreen('Saved API key to local storage.');
+                resultsContainer.innerHTML = '<div class="loader"></div>';
+
+                const url = `https://api.nytimes.com/svc/topstories/v2/home.json?api-key=${apiKey}`;
+                logToScreen(`Fetching from URL: ${url.replace(apiKey, 'REDACTED')}`);
+
+                try {
+                    const response = await fetch(url);
+                    logToScreen(`Received response with status: ${response.status}`);
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        let errorMessage = `NYT API Error (${response.status}): ${response.statusText}`;
+                        try {
+                           const errorJson = JSON.parse(errorText);
+                           errorMessage = `NYT API Error (${response.status}): ${errorJson?.fault?.faultstring || errorText}`;
+                        } catch (e) {
+                           errorMessage = `NYT API Error (${response.status}): ${errorText}`;
+                        }
+                        throw new Error(errorMessage);
+                    }
+                    const data = await response.json();
+                    logToScreen('Successfully fetched and parsed JSON data from NYT.', 'success');
+                    filterAndDisplayNews(data.results);
+                } catch (error) {
+                    logToScreen(error.message, 'error');
+                    showError(error.message); // Show error to user as well
+                    resultsContainer.innerHTML = '';
+                    resultsContainer.appendChild(initialMessage);
+                }
+            }
+            
+            function filterAndDisplayNews(articles) {
+                logToScreen(`Filtering ${articles.length} articles for positive sentiment.`);
+                positiveStoryCache = []; 
+                const positiveStories = [];
+
+                if (articles && Array.isArray(articles)) {
+                    articles.forEach(story => {
+                        if (story && typeof story === 'object') {
+                            const title = story.title || "";
+                            const abstract = story.abstract || "";
+                            const textToAnalyze = `${title}. ${abstract}`;
+                            const result = sentiment.analyze(textToAnalyze);
+                            if (result.score > 0) {
+                                positiveStories.push({ title, abstract, url: story.url, score: result.score });
+                            }
+                        }
+                    });
+                }
+                
+                logToScreen(`Found ${positiveStories.length} positive stories.`, 'success');
+                positiveStoryCache = positiveStories;
+                displayResults(positiveStories);
+            }
+
+            function displayResults(stories) {
+                resultsContainer.innerHTML = ''; 
+                if (stories.length === 0) {
+                    resultsContainer.innerHTML = '<p class="text-center text-gray-500">No distinctly positive stories found on the front page today.</p>';
+                    return;
+                }
+                
+                const list = document.createElement('div');
+                list.className = 'space-y-4 w-full';
+
+                const header = document.createElement('h2');
+                header.className = 'text-2xl font-bold text-center mb-4';
+                header.textContent = `Found ${stories.length} Positive Stories`;
+                resultsContainer.appendChild(header);
+
+                const summarizeBtn = document.createElement('button');
+                summarizeBtn.innerHTML = '✨ Summarize Today\'s Good News';
+                summarizeBtn.className = 'w-full bg-green-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-green-700 transition shadow mb-6';
+                summarizeBtn.onclick = handleSummarizeClick;
+                resultsContainer.appendChild(summarizeBtn);
+
+                stories.forEach((story, index) => {
+                    const articleDiv = document.createElement('div');
+                    articleDiv.className = 'p-5 bg-gray-50 hover:bg-gray-100 rounded-lg transition duration-300 border border-gray-200';
+                    const articleLink = document.createElement('a');
+                    articleLink.href = story.url;
+                    articleLink.target = '_blank';
+                    articleLink.rel = 'noopener noreferrer';
+                    const articleTitle = document.createElement('h3');
+                    articleTitle.textContent = story.title;
+                    articleTitle.className = 'text-lg font-semibold text-blue-700 hover:underline';
+                    articleLink.appendChild(articleTitle);
+                    articleDiv.appendChild(articleLink);
+                    const eli5Btn = document.createElement('button');
+                    eli5Btn.innerHTML = "✨ Explain Like I'm 5";
+                    eli5Btn.className = 'text-sm bg-purple-100 text-purple-800 font-semibold py-1 px-3 rounded-full hover:bg-purple-200 transition mt-3';
+                    eli5Btn.dataset.index = index; 
+                    eli5Btn.onclick = handleEli5Click;
+                    articleDiv.appendChild(eli5Btn);
+                    list.appendChild(articleDiv);
+                });
+                
+                resultsContainer.appendChild(list);
+                 logToScreen('Successfully displayed results on the page.', 'success');
+            }
+            
+            async function callGemini(prompt) {
+                logToScreen('Calling Gemini API...');
+                const geminiApiKey = ""; // Leave blank
+                const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+
+                const response = await fetch(geminiApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`Gemini API error: ${response.statusText}`);
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts[0].text) {
+                    logToScreen('Successfully received response from Gemini.', 'success');
+                    return result.candidates[0].content.parts[0].text;
+                } else {
+                    throw new Error("No content received from Gemini API.");
+                }
+            }
+
+            async function handleSummarizeClick() {
+                modalTitle.textContent = "Today's Good News Summary";
+                modalBody.innerHTML = '<div class="flex justify-center"><div class="loader"></div></div>';
+                modal.classList.remove('hidden');
+                const headlines = positiveStoryCache.map(s => s.title).join('\n');
+                const prompt = `Please act as a news anchor. Summarize the following positive news headlines into a single, optimistic paragraph for a 'good news of the day' report:\n\n${headlines}`;
+                try {
+                    const summary = await callGemini(prompt);
+                    modalBody.textContent = summary;
+                } catch (e) {
+                    logToScreen(e.message, 'error');
+                    modalBody.textContent = `Error generating summary: ${e.message}`;
+                }
+            }
+
+            async function handleEli5Click(event) {
+                const index = event.target.dataset.index;
+                const story = positiveStoryCache[index];
+                modalTitle.textContent = "Explain Like I'm 5";
+                modalBody.innerHTML = '<div class="flex justify-center"><div class="loader"></div></div>';
+                modal.classList.remove('hidden');
+                const prompt = `Explain the main topic of this news article in simple terms, as if you were explaining it to a 5-year-old. Here is the title and abstract:\n\nTitle: ${story.title}\n\nAbstract: ${story.abstract}`;
+                try {
+                    const explanation = await callGemini(prompt);
+                    modalBody.textContent = explanation;
+                } catch (e) {
+                    logToScreen(e.message, 'error');
+                    modalBody.textContent = `Error generating explanation: ${e.message}`;
+                }
+            }
+
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.classList.remove('hidden');
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', main);
+
+    </script>
+</body>
+</html>
