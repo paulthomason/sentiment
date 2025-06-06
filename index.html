@@ -130,6 +130,17 @@
             logConsole.appendChild(p);
             logConsole.scrollTop = logConsole.scrollHeight; // Auto-scroll
         }
+
+        // Capture uncaught errors and promise rejections
+        window.addEventListener('error', (e) => {
+            logToScreen(`Global Error: ${e.message}`, 'error');
+            if (e.error && e.error.stack) logToScreen(e.error.stack, 'warn');
+        });
+
+        window.addEventListener('unhandledrejection', (e) => {
+            logToScreen(`Unhandled Promise Rejection: ${e.reason}`, 'error');
+            if (e.reason && e.reason.stack) logToScreen(e.reason.stack, 'warn');
+        });
         
         function main() {
             logToScreen('App Initialized. DOM and scripts loaded.');
@@ -194,6 +205,7 @@
                     filterAndDisplayNews(data.results);
                 } catch (error) {
                     logToScreen(error.message, 'error');
+                    if (error.stack) logToScreen(error.stack, 'warn');
                     showError(error.message); // Show error to user as well
                     resultsContainer.innerHTML = '';
                     resultsContainer.appendChild(initialMessage);
@@ -305,6 +317,7 @@
                     modalBody.textContent = summary;
                 } catch (e) {
                     logToScreen(e.message, 'error');
+                    if (e.stack) logToScreen(e.stack, 'warn');
                     modalBody.textContent = `Error generating summary: ${e.message}`;
                 }
             }
@@ -321,6 +334,7 @@
                     modalBody.textContent = explanation;
                 } catch (e) {
                     logToScreen(e.message, 'error');
+                    if (e.stack) logToScreen(e.stack, 'warn');
                     modalBody.textContent = `Error generating explanation: ${e.message}`;
                 }
             }
@@ -331,7 +345,10 @@
             }
         }
         
-        document.addEventListener('DOMContentLoaded', main);
+        document.addEventListener('DOMContentLoaded', () => {
+            logToScreen('DOMContentLoaded event fired.');
+            main();
+        });
 
     </script>
 </body>
